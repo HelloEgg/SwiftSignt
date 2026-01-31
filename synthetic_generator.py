@@ -82,14 +82,21 @@ class SpineSynthGenerator:
             random.seed(seed)
 
     def _get_tissue_type(self, label: int) -> str:
-        """Map label to tissue type."""
+        """Map label to tissue type.
+
+        For num_classes=14 (labels 0-13):
+          0: background
+          1-6: vertebrae (L1-L5, S1)
+          7-12: intervertebral discs
+          13: spinal canal
+        """
         if label == 0:
             return 'background'
-        elif 1 <= label <= 7:
+        elif 1 <= label <= 6:
             return 'vertebrae'
-        elif 8 <= label <= 13:
+        elif 7 <= label <= 12:
             return 'disc'
-        else:
+        else:  # label == 13 or higher
             return 'canal'
 
     def _sample_intensity(self, tissue_type: str, contrast: str) -> Tuple[float, float]:
@@ -324,21 +331,21 @@ def create_demo_label_map(size: Tuple[int, int] = (256, 256)) -> np.ndarray:
         x_end = center_x + 25
         label_map[y_start:y_end, x_start:x_end] = i + 1
 
-    # Discs (labels 8-11) between vertebrae
+    # Discs (labels 7-10) between vertebrae
     for i, y_offset in enumerate(range(-60, 61, 40)):
         y_start = center_y + y_offset - 5
         y_end = center_y + y_offset + 5
         x_start = center_x - 20
         x_end = center_x + 20
-        label_map[y_start:y_end, x_start:x_end] = i + 8
+        label_map[y_start:y_end, x_start:x_end] = i + 7
 
-    # Spinal canal (label 14)
+    # Spinal canal (label 13 - last valid class for num_classes=14)
     for y_offset in range(-80, 81):
         y = center_y + y_offset
         x_start = center_x + 25
         x_end = center_x + 35
         if 0 <= y < h:
-            label_map[y, x_start:x_end] = 14
+            label_map[y, x_start:x_end] = 13
 
     return label_map
 

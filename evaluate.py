@@ -43,9 +43,9 @@ from synthetic_generator import SpineSynthGenerator
 # Structure groupings for reporting
 STRUCTURE_GROUPS = {
     'background': [0],
-    'vertebrae': list(range(1, 8)),      # L1-S1 vertebrae
-    'disc': list(range(8, 14)),          # Intervertebral discs
-    'canal': list(range(14, 20)),        # Spinal canal and other
+    'vertebrae': list(range(1, 7)),      # L1-L5, S1 vertebrae (labels 1-6)
+    'disc': list(range(7, 13)),          # Intervertebral discs (labels 7-12)
+    'canal': [13],                        # Spinal canal (label 13)
 }
 
 
