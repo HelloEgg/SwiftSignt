@@ -29,7 +29,11 @@ try:
     HAS_SITK = True
 except ImportError:
     HAS_SITK = False
-    print("Warning: SimpleITK not installed. Using numpy-based loading.")
+    print("=" * 60)
+    print("NOTE: SimpleITK not installed.")
+    print("To load real .mha files, install with: pip install SimpleITK")
+    print("Using synthetic demo data for training instead.")
+    print("=" * 60)
 
 from models.unet import UNet, CombinedLoss, compute_dice_per_class
 from synthetic_generator import SpineSynthGenerator
@@ -45,9 +49,25 @@ def load_mha_file(filepath: str) -> np.ndarray:
         image = sitk.ReadImage(str(filepath))
         return sitk.GetArrayFromImage(image)
     else:
-        # Fallback: generate random data for testing without real data
-        print(f"Warning: Cannot load {filepath}, generating placeholder data")
-        return np.random.rand(20, 256, 256).astype(np.float32)
+        # Check if it's a mask file - generate proper label data
+        from synthetic_generator import create_demo_label_map
+
+        filepath_str = str(filepath).lower()
+        if 'mask' in filepath_str:
+            # Generate stack of demo label maps for masks
+            label_slices = []
+            for _ in range(20):
+                label_slices.append(create_demo_label_map((256, 256)))
+            return np.stack(label_slices).astype(np.int32)
+        else:
+            # Generate synthetic images from label maps
+            from synthetic_generator import SpineSynthGenerator
+            generator = SpineSynthGenerator(contrast_type='random')
+            image_slices = []
+            for _ in range(20):
+                label_map = create_demo_label_map((256, 256))
+                image_slices.append(generator.generate_synthetic_mri(label_map))
+            return np.stack(image_slices).astype(np.float32)
 
 
 def normalize_image(image: np.ndarray) -> np.ndarray:
