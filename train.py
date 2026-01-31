@@ -29,7 +29,11 @@ try:
     HAS_SITK = True
 except ImportError:
     HAS_SITK = False
-    print("Warning: SimpleITK not installed. Using numpy-based loading.")
+    print("=" * 60)
+    print("NOTE: SimpleITK not installed.")
+    print("To load real .mha files, install with: pip install SimpleITK")
+    print("Using synthetic demo data for training instead.")
+    print("=" * 60)
 
 from models.unet import UNet, CombinedLoss, compute_dice_per_class
 from synthetic_generator import SpineSynthGenerator
@@ -45,9 +49,25 @@ def load_mha_file(filepath: str) -> np.ndarray:
         image = sitk.ReadImage(str(filepath))
         return sitk.GetArrayFromImage(image)
     else:
-        # Fallback: generate random data for testing without real data
-        print(f"Warning: Cannot load {filepath}, generating placeholder data")
-        return np.random.rand(20, 256, 256).astype(np.float32)
+        # Check if it's a mask file - generate proper label data
+        from synthetic_generator import create_demo_label_map
+
+        filepath_str = str(filepath).lower()
+        if 'mask' in filepath_str:
+            # Generate stack of demo label maps for masks
+            label_slices = []
+            for _ in range(20):
+                label_slices.append(create_demo_label_map((256, 256)))
+            return np.stack(label_slices).astype(np.int32)
+        else:
+            # Generate synthetic images from label maps
+            from synthetic_generator import SpineSynthGenerator
+            generator = SpineSynthGenerator(contrast_type='random')
+            image_slices = []
+            for _ in range(20):
+                label_map = create_demo_label_map((256, 256))
+                image_slices.append(generator.generate_synthetic_mri(label_map))
+            return np.stack(image_slices).astype(np.float32)
 
 
 def normalize_image(image: np.ndarray) -> np.ndarray:
@@ -58,6 +78,71 @@ def normalize_image(image: np.ndarray) -> np.ndarray:
     if max_val > min_val:
         image = (image - min_val) / (max_val - min_val)
     return image
+
+
+def remap_spider_labels(mask: np.ndarray, num_classes: int = 14) -> np.ndarray:
+    """
+    Remap SPIDER dataset labels to consecutive range [0, num_classes-1].
+
+    SPIDER dataset uses various label values (e.g., 201-207 for vertebrae,
+    101-106 for discs, etc.). This function remaps them to a standard range.
+
+    Mapping strategy:
+      0: Background (label 0)
+      1-6: Vertebrae (remap from original vertebrae labels)
+      7-12: Discs (remap from original disc labels)
+      13: Spinal canal / other structures
+    """
+    remapped = np.zeros_like(mask, dtype=np.int64)
+
+    # Get unique labels in this mask
+    unique_labels = np.unique(mask)
+    unique_labels = unique_labels[unique_labels > 0]  # Exclude background
+
+    if len(unique_labels) == 0:
+        return remapped
+
+    # Sort labels to maintain consistent ordering
+    unique_labels = sorted(unique_labels)
+
+    # Simple remapping: assign consecutive labels starting from 1
+    # Group by approximate ranges if possible
+    vertebrae_labels = []
+    disc_labels = []
+    other_labels = []
+
+    for label in unique_labels:
+        if label >= 200:  # Likely vertebrae in SPIDER
+            vertebrae_labels.append(label)
+        elif label >= 100:  # Likely discs in SPIDER
+            disc_labels.append(label)
+        else:
+            other_labels.append(label)
+
+    # If the above heuristic doesn't work, just use sequential mapping
+    if not vertebrae_labels and not disc_labels:
+        # Fallback: sequential mapping
+        for i, label in enumerate(unique_labels):
+            if i < num_classes - 1:
+                remapped[mask == label] = i + 1
+            else:
+                remapped[mask == label] = num_classes - 1
+    else:
+        # Map vertebrae to labels 1-6
+        for i, label in enumerate(sorted(vertebrae_labels)):
+            target = min(i + 1, 6)
+            remapped[mask == label] = target
+
+        # Map discs to labels 7-12
+        for i, label in enumerate(sorted(disc_labels)):
+            target = min(i + 7, 12)
+            remapped[mask == label] = target
+
+        # Map other to label 13
+        for label in other_labels:
+            remapped[mask == label] = 13
+
+    return remapped
 
 
 def get_2d_slices(
@@ -152,6 +237,9 @@ class RealSpineDataset(Dataset):
 
                 # Normalize image
                 image = normalize_image(image)
+
+                # Remap SPIDER labels to standard range [0, 13]
+                mask = remap_spider_labels(mask)
 
                 # Extract 2D slices
                 slices = get_2d_slices(image, mask)
@@ -286,6 +374,9 @@ class SyntheticSpineDataset(Dataset):
 
             try:
                 mask = load_mha_file(str(mask_path))
+
+                # Remap SPIDER labels to standard range [0, 13]
+                mask = remap_spider_labels(mask)
 
                 # Extract 2D slices
                 for slice_idx in range(mask.shape[0]):
