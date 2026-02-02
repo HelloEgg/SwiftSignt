@@ -457,7 +457,7 @@ def load_model(checkpoint_path: str, num_classes: int = 14, device: torch.device
     )
 
     if os.path.exists(checkpoint_path):
-        checkpoint = torch.load(checkpoint_path, map_location=device or 'cpu')
+        checkpoint = torch.load(checkpoint_path, map_location=device or 'cpu', weights_only=False)
         if 'model_state_dict' in checkpoint:
             model.load_state_dict(checkpoint['model_state_dict'])
         else:

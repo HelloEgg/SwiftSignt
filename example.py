@@ -169,7 +169,7 @@ def demo_model_inference(save_dir: str = "./results"):
     # Try to load trained model
     model_path = "./models/saved/model_a_synthetic_best.pth"
     if os.path.exists(model_path):
-        checkpoint = torch.load(model_path, map_location=device)
+        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint['model_state_dict'])
         print(f"Loaded trained model from: {model_path}")
     else:
